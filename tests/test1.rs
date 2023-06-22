@@ -10,8 +10,8 @@ struct MyStruct {
 }
 
 impl mystruct_migrations::Migrate for MyStruct {
-    fn to_v2(v: mystruct_migrations::MyStructv1) -> mystruct_migrations::MyStructv2 {
-       mystruct_migrations::MyStructv2 {
+    fn to_v2(v: mystruct_migrations::MyStructV1) -> mystruct_migrations::MyStructV2 {
+       mystruct_migrations::MyStructV2 {
           new_field: v.old_field,
        }
     }

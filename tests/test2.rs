@@ -17,16 +17,16 @@ struct A {
 }
 
 impl a_migrations::Migrate for A {
-    fn to_v2(v: a_migrations::Av1) -> a_migrations::Av2 {
-        a_migrations::Av2 {
+    fn to_v2(v: a_migrations::AV1) -> a_migrations::AV2 {
+        a_migrations::AV2 {
             a: v.a + v.b,
         }
     }
 }
 
 impl awrap_migrations::Migrate for Awrap {
-    fn to_v2(v:awrap_migrations::Awrapv1) -> awrap_migrations::Awrapv2 {
-        awrap_migrations::Awrapv2 {
+    fn to_v2(v:awrap_migrations::AwrapV1) -> awrap_migrations::AwrapV2 {
+        awrap_migrations::AwrapV2 {
             a: v.a,
             c: 0,
         }
