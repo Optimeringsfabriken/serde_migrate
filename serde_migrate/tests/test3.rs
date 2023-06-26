@@ -1,4 +1,4 @@
-use serde_migrate::versioned;
+use serde_migrate::{versioned, Versioned};
 
 #[versioned]
 #[derive(PartialEq, Debug)]
@@ -37,12 +37,12 @@ fn test_migration() {
     let orig = A {
         a: 123,
     };
-    let json = serde_json::to_string_pretty(&orig).unwrap();
-    let decoded = serde_json::from_str(&json).unwrap();
+    let json = serde_json::to_string_pretty(&Versioned(&orig)).unwrap();
+    let decoded = serde_json::from_str::<Versioned<_>>(&json).unwrap().0;
     assert_eq!(orig, decoded);
     println!("{}", json);
 
-    let decoded2: A2 = serde_json::from_str(&json).unwrap();
+    let decoded2: A2 = serde_json::from_str::<Versioned<_>>(&json).unwrap().0;
     assert_eq!(decoded2, A2 {
         a: orig.a,
         c: 321

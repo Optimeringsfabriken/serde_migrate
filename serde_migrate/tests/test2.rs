@@ -1,4 +1,4 @@
-use serde_migrate::{versioned};
+use serde_migrate::{versioned, Versioned};
 
 #[versioned]
 #[derive(PartialEq, Debug)]
@@ -39,19 +39,20 @@ fn test_roundtrip() {
     let orig = A {
         a: 123,
     };
-    let json = serde_json::to_string_pretty(&orig).unwrap();
-    let decoded = serde_json::from_str(&json).unwrap();
-    assert_eq!(orig, decoded);
+    let json = serde_json::to_string_pretty(&Versioned(&orig)).unwrap();
+    dbg!(&json);
+    let decoded: Versioned<A> = serde_json::from_str(&json).unwrap();
+    assert_eq!(orig, decoded.0);
     println!("{}", json);
 
-    let decoded2 = serde_json::from_str(r#"{ "version": 1, "value": { "a": 121, "b": 2 } }"#).unwrap();
+    let decoded2 = serde_json::from_str::<Versioned<A>>(r#"{ "versions": [1], "value": { "a": 121, "b": 2 } }"#).unwrap().0;
 
     assert_eq!(orig, decoded2);
 
 
-    let bc = bincode::serialize(&orig).unwrap();
+    let bc = bincode::serialize(&Versioned(&orig)).unwrap();
     println!("{:?}", bc);
-    let decoded = bincode::deserialize(&bc).unwrap();
+    let decoded = bincode::deserialize::<Versioned<_>>(&bc).unwrap().0;
 
     assert_eq!(orig, decoded);
 
@@ -60,6 +61,7 @@ fn test_roundtrip() {
         c: 789,
     };
     let json = serde_json::to_string_pretty(&orig).unwrap();
+    println!("Decoding json: {}", json);
     let decoded = serde_json::from_str(&json).unwrap();
     println!("{}", json);
     assert_eq!(orig, decoded);
