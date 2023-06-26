@@ -1,5 +1,5 @@
-#![feature(trace_macros)]
-#![feature(log_syntax)]
+// #![feature(trace_macros)]
+// #![feature(log_syntax)]
 
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens, format_ident};
