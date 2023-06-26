@@ -64,7 +64,7 @@
 //!
 //! fn main() {
 //!     // Decode a serialized version 1 struct. Both to_v2 and to_v3 will run.
-//!     let decoded: MyStruct = serde_json::from_str::<Versioned<_>>(r#"{ "versions": [1], "value": { "a": 123 } }"#).unwrap().0;
+//!     let decoded: MyStruct = serde_json::from_str::<Versioned<_>>(r#"{ "versions": { "rust_out::MyStruct": 1 }, "value": { "a": 123 } }"#).unwrap().0;
 //!     // Check that the migration logic worked.
 //!     // Note that the `b` field is not present in the deserialized data at all, because it was removed in version 3.
 //!     assert_eq!(decoded, MyStruct {
@@ -125,7 +125,7 @@
 //! }
 //!
 //! fn main() {
-//!     let decoded: MyStruct = serde_json::from_str::<Versioned<_>>(r#"{ "versions": [1], "value": { "value": "123" } }"#).unwrap().0;
+//!     let decoded: MyStruct = serde_json::from_str::<Versioned<_>>(r#"{ "versions": { "rust_out::MyStruct": 1 }, "value": { "value": "123" } }"#).unwrap().0;
 //!     assert_eq!(decoded, MyStruct {
 //!        value: 123,
 //!     });
@@ -147,16 +147,31 @@
 //!
 //! fn main() {
 //!   let encoded = serde_json::to_string(&Versioned(&MyStruct { value: 123 })).unwrap();
-//!   assert_eq!(encoded, r#"{"versions":[1],"value":{"value":123}}"#);
+//!   assert_eq!(encoded, r#"{"versions":{"rust_out::MyStruct":1},"value":{"value":123}}"#);
 //! }
 //! ```
+//!
+//! ## What counts as a breaking change?
+//!
+//! What exactly counts as a breaking change differs by serialization format. For example, in json, keys can be re-ordered without breaking compatibility, but
+//! when using bincode, the order of fields matter.
+//!
+//! For the best compatibility, you should consider the following as breaking:
+//!
+//! * Removing a field
+//! * Adding a field
+//! * Changing the type of a field
+//! * Changing the name of a field (only breaking in self-describing formats like json, but not in e.g. bincode)
+//! * Changing the order of fields (only breaking in non-self-describing formats like bincode, but not in e.g. json)
+//! * Changing the name of a type or module (this may cause this crate to not be able to find the version information) (TODO: Implement an alias attribute to help with this)
+//! * Adding/removing serde attributes like `serialize_with` or `skip_serializing_if`.
 use std::{fmt::Display, any::TypeId, cell::RefCell};
 
 pub use serde_migrate_macros::versioned;
 
 use std::{collections::HashMap};
 
-use serde::{Serialize, Serializer, ser::{self, SerializeStruct}, Deserialize, de::{Visitor, SeqAccess}};
+use serde::{Serialize, Serializer, ser::{self, SerializeStruct}, Deserialize, de::{Visitor, SeqAccess}, Deserializer};
 
 thread_local! {
     pub static DESERIALIZATION_STATE: std::cell::RefCell<Option<DeserializationState>> = RefCell::new(None);
@@ -164,7 +179,20 @@ thread_local! {
 
 pub struct DeserializationState {
     pub versions: HashMap<TypeId, u32>,
-    pub remaining_versions: Vec<u32>,
+    pub remaining_versions: HashMap<String, u32>,
+}
+
+impl DeserializationState {
+    pub fn get_version<'de, T: 'static, D: Deserializer<'de>> (&mut self) -> Result<u32, D::Error> {
+        if let Some(v) = self.versions.get(&std::any::TypeId::of::<T>()) {
+            Ok(*v)
+        } else if let Some(v) = self.remaining_versions.get(std::any::type_name::<T>()) {
+            self.versions.insert(std::any::TypeId::of::<T>(), *v);
+            Ok(*v)
+        } else {
+            Err(serde::de::Error::custom(format!("no version found for type {}", std::any::type_name::<T>())))
+        }
+    }
 }
 
 pub struct Versioned<T>(pub T);
@@ -210,9 +238,8 @@ impl<'de, T: Deserialize<'de>> Visitor<'de> for VersionedVisitor<T> {
     where
         V: SeqAccess<'de>,
     {
-        let mut versions: Vec<u32> = seq.next_element()?
+        let versions: HashMap<String, u32> = seq.next_element()?
             .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-        versions.reverse();
         let prev = DESERIALIZATION_STATE.with(|state| {
             state.replace(Some(DeserializationState {
                 versions: Default::default(),
@@ -240,8 +267,7 @@ impl<'de, T: Deserialize<'de>> Visitor<'de> for VersionedVisitor<T> {
                         return Err(serde::de::Error::duplicate_field("versions"));
                     }
                     version_found = true;
-                    let mut versions: Vec<u32> = map.next_value()?;
-                    versions.reverse();
+                    let versions: HashMap<String, u32> = map.next_value()?;
                     DESERIALIZATION_STATE.with(|state| {
                         prev = state.replace(Some(DeserializationState {
                             versions: Default::default(),
@@ -274,8 +300,8 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Versioned<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de> {
-    
-        
+
+
 
         deserializer.deserialize_struct("Versioned", &["versions", "value"], VersionedVisitor::default())
     }
@@ -284,7 +310,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Versioned<T> {
 #[derive(Default)]
 pub struct VersionSerializer {
     pub seen: Vec<TypeId>,
-    pub versions: Vec<u32>,
+    pub versions: Vec<(&'static str, u32)>,
     pub last: Option<TypeId>,
 }
 
@@ -297,12 +323,12 @@ impl VersionSerializer {
         self.last = Some(id);
         if !self.seen.contains(&id) {
             self.seen.push(id);
-            self.versions.push(version);
+            self.versions.push((std::any::type_name::<T>(), version));
         }
     }
 
-    pub fn to_serialized_versions(self) -> Vec<u32> {
-        self.versions
+    pub fn to_serialized_versions(self) -> HashMap<&'static str, u32> {
+        self.versions.into_iter().collect()
     }
 }
 
@@ -345,7 +371,7 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
     fn is_human_readable(&self) -> bool {
         false
     }
-    
+
     type Ok = ();
 
     type Error = DummyError;
@@ -413,7 +439,7 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
     fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
         Ok(())
     }
-    
+
     #[inline]
     fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> {
         Ok(())
@@ -443,7 +469,7 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
         Ok(())
     }
-    
+
     #[inline]
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
     where

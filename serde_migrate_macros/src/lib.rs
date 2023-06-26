@@ -301,17 +301,11 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                                 let v = serde_migrate::DESERIALIZATION_STATE.with(|state| {
                                     let mut state = state.borrow_mut();
                                     if let Some(state) = &mut *state {
-                                        if let Some(v) = state.versions.get(&std::any::TypeId::of::<Self>()) {
-                                            *v
-                                        } else {
-                                            let v = state.remaining_versions.pop().expect("Not enough serialized versions. The serialized data seems corrupt.");
-                                            state.versions.insert(std::any::TypeId::of::<Self>(), v);
-                                            v
-                                        }
+                                        state.get_version::<Self, D>()
                                     } else {
-                                        #max_version
+                                        Ok(#max_version)
                                     }
-                                });
+                                })?;
 
                                 let result = match v {
                                     #versioned_deserialization_cases,

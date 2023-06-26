@@ -55,9 +55,10 @@ fn test_deep() {
         }
     };
     let json = serde_json::to_string_pretty(&Versioned(&orig)).unwrap();
+    println!("{}", json);
     let decoded = serde_json::from_str::<Versioned<_>>(&json).unwrap().0;
     assert_eq!(orig, decoded);
 
-    let decoded = serde_json::from_str::<Versioned<_>>(r#"{ "versions": [1,1,1,2], "value": { "v": { "v": { "v": { "old_field": 999 }}}}}"#).unwrap().0;
+    let decoded = serde_json::from_str::<Versioned<_>>(r#"{ "versions": { "test_deep::MyStruct": 1, "test_deep::Deep1": 1, "test_deep::Deep2": 1, "test_deep::Deep3": 2 }, "value": { "v": { "v": { "v": { "old_field": 999, "older_field": 555 }}}}}"#).unwrap().0;
     assert_eq!(orig, decoded);
 }

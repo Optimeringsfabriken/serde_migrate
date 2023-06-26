@@ -45,7 +45,7 @@ fn test_roundtrip() {
     assert_eq!(orig, decoded.0);
     println!("{}", json);
 
-    let decoded2 = serde_json::from_str::<Versioned<A>>(r#"{ "versions": [1], "value": { "a": 121, "b": 2 } }"#).unwrap().0;
+    let decoded2 = serde_json::from_str::<Versioned<A>>(r#"{ "versions": { "test2::A": 1 }, "value": { "a": 121, "b": 2 } }"#).unwrap().0;
 
     assert_eq!(orig, decoded2);
 
