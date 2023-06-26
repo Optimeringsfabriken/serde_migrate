@@ -183,6 +183,14 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                         quote!(#f)
                     }).collect::<Punctuated<_,Comma>>();
 
+                    // Remove all serde attributes from the struct.
+                    // They will have been preserved in the other struct variants.
+                    // But we cannot keep them on the original struct, because the serde derive macro
+                    // will never look at that one.
+                    for field in &mut fields.named {
+                        field.attrs.retain(|a| !a.path().is_ident("serde"));
+                    }
+
                     let mut migration_calls = quote!();
                     for v in min_version..=max_version {
                         let from_variant = format_ident!("V{}", v.to_string());
