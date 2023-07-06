@@ -169,7 +169,7 @@ use std::{fmt::Display, any::TypeId, cell::RefCell};
 
 pub use serde_migrate_macros::versioned;
 
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use serde::{Serialize, Serializer, ser::{self, SerializeStruct}, Deserialize, de::{Visitor, SeqAccess}, Deserializer};
 
@@ -190,7 +190,13 @@ impl DeserializationState {
             self.versions.insert(std::any::TypeId::of::<T>(), *v);
             Ok(*v)
         } else {
-            Err(serde::de::Error::custom(format!("no version found for type {}", std::any::type_name::<T>())))
+            // No version was found for this type.
+            // This most likely means that the type was serialized before the #[versioned] attribute was added.
+            // Therefore we should treat the data as version 1.
+            Ok(1)
+
+            // TODO: Maybe add a strict mode that throws an error?
+            // Err(serde::de::Error::custom(format!("no version found for type {}", std::any::type_name::<T>())))
         }
     }
 }
