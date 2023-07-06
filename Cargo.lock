@@ -556,6 +556,7 @@ dependencies = [
 name = "serde_migrate_macros"
 version = "0.1.0"
 dependencies = [
+ "proc-macro2",
  "quote",
  "syn",
 ]

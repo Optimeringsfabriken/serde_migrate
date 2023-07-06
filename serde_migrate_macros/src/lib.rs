@@ -34,6 +34,19 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
 
     let extra_ast;
 
+    // Grab all serde attributes on the root struct.
+    // We will add these to the versioned structs instead.
+    // We cannot leave them, since the root struct will not have #[derive(Serialize)] or #[derive(Deserialize)]
+    let mut struct_extra_attrs = proc_macro2::TokenStream::new();
+    versioned_ast.attrs.retain(|attr| {
+        if attr.path().is_ident("serde") {
+            attr.to_tokens(&mut struct_extra_attrs);
+            false
+        } else {
+            true
+        }
+    });
+
     match &mut versioned_ast.data {
         syn::Data::Struct(ref mut struct_data) => {
             match &mut struct_data.fields {
@@ -135,6 +148,7 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
 
                         versioned_structs.extend(quote!(
                             #[derive(serde::Deserialize)]
+                            #struct_extra_attrs
                             pub(crate) struct #versioned_name #generics {
                                 #versioned_fields
                             }
@@ -260,6 +274,7 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                                 }
 
                                 #[derive(Serialize)]
+                                #struct_extra_attrs
                                 pub(crate) struct Borrowed #generics_with_a_lifetime {
                                     #borrowed_fields
                                 }
