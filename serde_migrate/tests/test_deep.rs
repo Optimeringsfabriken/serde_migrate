@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use serde_migrate::{versioned, Versioned};
 
 #[versioned]
@@ -9,14 +10,17 @@ struct MyStruct {
 #[versioned]
 #[derive(PartialEq, Debug)]
 struct Deep1 {
-    v: Deep2,
+    v: Option<Deep2>,
 }
 
 #[versioned]
 #[derive(PartialEq, Debug)]
 struct Deep2 {
-    v: Deep3,
+    v: NewTypeWrapper,
 }
+
+#[derive(serde::Serialize, Deserialize, PartialEq, Debug)]
+struct NewTypeWrapper(Deep3);
 
 #[versioned]
 #[derive(PartialEq, Debug)]
@@ -47,14 +51,19 @@ impl deep3_migrations::Migrate for Deep3 {
 fn test_deep() {
     let orig = MyStruct {
         v: Deep1 {
-            v: Deep2 {
-                v: Deep3 {
+            v: Some(Deep2 {
+                v: NewTypeWrapper(Deep3 {
                     new_field: 999,
-                }
-            }
+                })
+            })
         }
     };
     let json = serde_json::to_string_pretty(&Versioned(&orig)).unwrap();
+    assert!(json.contains("new_field"));
+    assert!(json.contains("test_deep::MyStruct"));
+    assert!(json.contains("test_deep::Deep1"));
+    assert!(json.contains("test_deep::Deep2"));
+    assert!(json.contains("test_deep::Deep3"));
     println!("{}", json);
     let decoded = serde_json::from_str::<Versioned<_>>(&json).unwrap().0;
     assert_eq!(orig, decoded);

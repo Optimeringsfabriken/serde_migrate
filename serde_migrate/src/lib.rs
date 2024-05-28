@@ -477,10 +477,10 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
     }
 
     #[inline]
-    fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok, Self::Error>
+    fn serialize_some<T: ?Sized>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize {
-            Ok(())
+            value.serialize(self)
     }
 
     #[inline]
@@ -507,11 +507,11 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
     fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize {
-            Ok(())
+            value.serialize(self)
     }
 
     #[inline]
@@ -520,11 +520,11 @@ impl<'a> serde::ser::Serializer for &'a mut VersionSerializer {
         _name: &'static str,
         _variant_index: u32,
         _variant: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: serde::Serialize {
-            Ok(())
+            value.serialize(self)
     }
 
     #[inline]
