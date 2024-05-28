@@ -1,10 +1,12 @@
 // #![feature(trace_macros)]
 // #![feature(log_syntax)]
 
+use std::default;
+
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens, format_ident};
 
-use syn::{parse_macro_input, DeriveInput, Expr, ExprLit, punctuated::Punctuated, Ident, token::Comma, Visibility, parse_quote};
+use syn::{parse_macro_input, parse_quote, punctuated::Punctuated, token::Comma, DeriveInput, Expr, ExprLit, Ident, ImplGenerics, Token, Visibility, WherePredicate};
 
 /// Macro for generating versioned serde serialization and deserialization implementations.
 ///
@@ -18,9 +20,36 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
     let (impl_generics, generics, _) = original_ast.generics.split_for_impl();
     let mut generics_with_de_lifetime = original_ast.generics.clone();
     generics_with_de_lifetime.params.push(parse_quote!('de));
+    for param in &mut generics_with_de_lifetime.params {
+        if let syn::GenericParam::Type(ty) = param {
+            ty.bounds.push(parse_quote!(serde::Deserialize<'de>));
+            ty.bounds.push(parse_quote!('static));
+        }
+    }
 
     let mut generics_with_a_lifetime = original_ast.generics.clone();
     generics_with_a_lifetime.params.push(parse_quote!('a));
+
+    let mut generics_serialize_bounds = Punctuated::<WherePredicate, Comma>::default();
+    let mut impl_generics_with_serialize = original_ast.generics.clone();
+    for param in &original_ast.generics.params {
+        if let syn::GenericParam::Type(ty) = param {
+            let ident = &ty.ident;
+            generics_serialize_bounds.push(parse_quote!(#ident: serde::Serialize));
+        }
+    }
+
+    for param in &mut impl_generics_with_serialize.params {
+        if let syn::GenericParam::Type(ty) = param {
+            ty.bounds.push(parse_quote!(serde::Serialize));
+            ty.bounds.push(parse_quote!('static));
+        }
+    }
+    impl_generics_with_serialize.where_clause = None;
+    
+    // impl_generics_with_serialize.
+    
+    
 
     // ::<T>, or empty if there are no generics
     let turbo_generics = if generics.to_token_stream().is_empty() {
@@ -250,7 +279,7 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                     let versioned_deserialization_cases = (min_version..=max_version).map(|v| {
                         let variant_name = format_ident!("V{}", v.to_string());
                         let versioned_struct_name = &version_struct_names[(v-min_version) as usize];
-                        quote!(#v => DataVersions #turbo_generics::#variant_name(#mod_name::#versioned_struct_name::deserialize(deserializer)?))
+                        quote!(#v => DataVersions #turbo_generics::#variant_name(#mod_name::#versioned_struct_name #turbo_generics::deserialize(deserializer)?))
                     }).collect::<Punctuated<_,Comma>>();
                     let invalid_version_message = format!("Invalid version for {} (got {{}})", struct_name);
 
@@ -291,7 +320,7 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                             }
                         }
 
-                        impl #impl_generics serde::ser::Serialize for #struct_name #generics {
+                        impl #impl_generics_with_serialize serde::ser::Serialize for #struct_name #generics {
                             fn serialize<S>(&self, mut serializer: S) -> Result<S::Ok, S::Error>
                             where
                                 S: serde::ser::Serializer,
@@ -307,8 +336,8 @@ pub fn versioned(_root_attribute: TokenStream, item: TokenStream) -> TokenStream
                                         state.set_version::<Self>(#max_version);
                                     }
                                 }
-
-                                Borrowed #generics {
+                                
+                                return Borrowed #turbo_generics {
                                     #field_copies_from_self
                                 }.serialize(serializer)
                             }
